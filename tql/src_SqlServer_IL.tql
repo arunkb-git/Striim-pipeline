@@ -1,5 +1,7 @@
 
-CREATE OR REPLACE APPLICATION src_SqlServer_IL;
+## CREATE OR REPLACE APPLICATION src_SqlServer_IL;
+
+CREATE APPLICATION src_SqlServer_IL;
 
 CREATE OR REPLACE SOURCE src_SqlServerIL USING Global.DatabaseReader ( 
   adapterName: 'DatabaseReader', 
