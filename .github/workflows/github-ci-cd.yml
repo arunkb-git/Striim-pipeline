@@ -1,0 +1,245 @@
+name: Striim TQL CI/CD
+
+on:
+  push:
+    paths:
+      - 'tql/**.tql'        
+    branches: [main, develop]
+  pull_request:
+    paths:
+      - 'tql/**.tql'
+
+jobs:
+  validate-tql:
+    name: Validate TQL
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate TQL file
+        run: |
+          echo "Scanning tql/ folder..."
+          TQL_COUNT=$(find tql/ -name "*.tql" | wc -l)
+          echo "Found $TQL_COUNT TQL file(s)"
+
+          if [[ $TQL_COUNT -eq 0 ]]; then
+            echo "ERROR: No .tql files found in tql/ folder"
+            exit 1
+          fi
+
+          find tql/ -name "*.tql" | while read FILE; do
+            echo "--- Checking: $FILE ---"
+
+            grep -q "CREATE APPLICATION" "$FILE" \
+              || { echo "ERROR: Missing CREATE APPLICATION in $FILE"; exit 1; }
+
+            grep -q "END APPLICATION" "$FILE" \
+              || { echo "ERROR: Missing END APPLICATION in $FILE"; exit 1; }
+
+            grep -iE "password\s*=\s*['\"][^'\"]{3,}" "$FILE" \
+              && echo "WARN: Possible plaintext password in $FILE" || true
+
+            echo "$FILE is valid"
+          done
+
+      - name: Show app names in TQL
+        run: |
+          echo "Apps defined in TQL:"
+          grep -h "CREATE APPLICATION" tql/*.tql \
+            | sed 's/CREATE APPLICATION //' \
+            | sed 's/;//'
+
+  deploy:
+    name: Deploy TQL to Striim
+    runs-on: ubuntu-latest
+    needs: validate-tql
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
+    env:
+      STRIIM_HOST: ${{ github.ref == 'refs/heads/main' && vars.STRIIM_PROD_HOST || vars.STRIIM_STAGING_HOST }}
+      STRIIM_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.STRIIM_PASSWORD_PROD || secrets.STRIIM_PASSWORD_STAGING }}
+      STRIIM_PORT: ${{ vars.STRIIM_PORT || '9080' }}
+      STRIIM_USER: ${{ vars.STRIIM_USER || 'admin' }}
+      STRIIM_APPS: ${{ vars.STRIIM_APPS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python requests
+        run: pip install requests --quiet
+
+
+      - name: Stop existing app
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+
+          for app in apps:
+            app = app.strip()
+            r = requests.get(f"{base_url}/applications/{app}", auth=auth)
+            if r.status_code == 404:
+              print(f"  [{app}] not found, skipping stop.")
+              continue
+            status = r.json().get("status", "")
+            if status not in ("RUNNING", "DEPLOYED"):
+              print(f"  [{app}] status={status}, skipping stop.")
+              continue
+            r = requests.put(f"{base_url}/applications/{app}/stop", auth=auth)
+            if r.ok:
+              print(f"Application {app} stopped succesfully!")
+            else:
+              print(f"ERROR stopping {app}: {r.text}")
+              sys.exit(1)
+          EOF
+
+      - name: Undeploy existing app
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+
+          for app in apps:
+            app = app.strip()
+            r = requests.get(f"{base_url}/applications/{app}", auth=auth)
+            if r.status_code == 404:
+              print(f"  [{app}] not found, skipping undeploy.")
+              continue
+            status = r.json().get("status", "")
+            if status in ("CREATED", "NOT_FOUND"):
+              print(f"  [{app}] not deployed, skipping undeploy.")
+              continue
+            r = requests.put(f"{base_url}/applications/{app}/undeploy", auth=auth)
+            if r.ok:
+              print(f"Application {app} undeployed succesfully!")
+            else:
+              print(f"ERROR undeploying {app}: {r.text}")
+              sys.exit(1)
+          EOF
+
+      - name: Import TQL into Striim
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+
+          for app in apps:
+            app      = app.strip()
+            app_name = app.split(".")[-1]          
+            tql_path = f"tql/{app_name}.tql"
+
+            if not os.path.exists(tql_path):
+              print(f"ERROR: TQL file not found at {tql_path}")
+              sys.exit(1)
+
+            with open(tql_path, "r") as f:
+              tql_content = f.read()
+
+            r = requests.post(
+              f"{base_url}/applications",
+              auth=auth,
+              headers={"Content-Type": "text/plain"},
+              data=tql_content
+            )
+            if r.ok:
+              print(f"Application {app} imported succesfully!")
+            else:
+              print(f"ERROR importing {app}: {r.text}")
+              sys.exit(1)
+          EOF
+
+      - name: Deploy app
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+
+          for app in apps:
+            app = app.strip()
+            r = requests.put(f"{base_url}/applications/{app}/deploy", auth=auth)
+            if r.ok:
+              print(f"Application {app} deployed succesfully!")
+            else:
+              print(f"ERROR deploying {app}: {r.text}")
+              sys.exit(1)
+          EOF
+
+      - name: Start app
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+
+          for app in apps:
+            app = app.strip()
+            r = requests.put(f"{base_url}/applications/{app}/start", auth=auth)
+            if r.ok:
+              print(f"Application {app} started succesfully!")
+            else:
+              print(f"ERROR starting {app}: {r.text}")
+              sys.exit(1)
+          EOF
+
+      - name: Verify app is RUNNING
+        run: |
+          python3 - << 'EOF'
+          import requests, os, sys, time
+
+          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
+          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
+          apps     = os.environ["STRIIM_APPS"].split(";")
+          base_url = f"http://{server}/api/v2"
+          timeout  = 120
+          interval = 5
+          elapsed  = 0
+
+          print(f"Waiting for apps to reach RUNNING (timeout={timeout}s)...")
+
+          while elapsed < timeout:
+            all_ok = True
+            pending = []
+            for app in apps:
+              app    = app.strip()
+              r      = requests.get(f"{base_url}/applications/{app}", auth=auth)
+              status = r.json().get("status", "UNKNOWN") if r.ok else "ERROR"
+              if status == "RUNNING":
+                print(f"  ✓ {app} → RUNNING")
+              else:
+                all_ok = False
+                pending.append(f"{app}:{status}")
+
+            if all_ok:
+              print("\nAll applications RUNNING — deployment successful!")
+              sys.exit(0)
+
+            print(f"  Waiting... ({elapsed}s) Pending: {pending}")
+            time.sleep(interval)
+            elapsed += interval
+
+          print(f"\nERROR: Apps did not reach RUNNING within {timeout}s: {pending}")
+          sys.exit(1)
+          EOF
