@@ -5,9 +5,7 @@ on:
     paths:
       - 'tql/**.tql'        
     branches: [main, develop]
-  pull_request:
-    paths:
-      - 'tql/**.tql'
+
 
 jobs:
   validate-tql:
