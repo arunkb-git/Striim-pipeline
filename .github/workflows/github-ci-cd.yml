@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate TQL files
-        shell: pwsh
+        shell: powershell
         run: |
           $tqlFiles = Get-ChildItem -Path "tql/" -Filter "*.tql" -Recurse
           $count = $tqlFiles.Count
@@ -48,7 +48,7 @@ jobs:
           }
 
       - name: Show app names in TQL
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "Apps defined in TQL:"
           Get-ChildItem -Path "tql/" -Filter "*.tql" | ForEach-Object {
@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Stop existing apps
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -121,7 +121,7 @@ jobs:
           }
 
       - name: Undeploy existing apps
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -159,7 +159,7 @@ jobs:
           }
 
       - name: Delete existing apps
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -191,7 +191,7 @@ jobs:
           }
 
       - name: Import TQL into Striim
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -225,7 +225,7 @@ jobs:
           }
 
       - name: Deploy apps
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -247,7 +247,7 @@ jobs:
           }
 
       - name: Start apps
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred    = [Convert]::ToBase64String(
@@ -269,7 +269,7 @@ jobs:
           }
 
       - name: Verify apps are RUNNING
-        shell: pwsh
+        shell: powershell
         run: |
           $baseUrl  = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
           $cred     = [Convert]::ToBase64String(
