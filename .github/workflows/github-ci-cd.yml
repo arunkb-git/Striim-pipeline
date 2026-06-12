@@ -54,7 +54,7 @@ jobs:
 
   deploy:
     name: Deploy TQL to Striim
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: validate-tql
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     environment:
