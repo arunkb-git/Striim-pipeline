@@ -2,12 +2,7 @@ name: Striim TQL CI/CD
 
 on:
   push:
-    paths:
-      - 'tql/**.tql'
     branches: [main, develop]
-  pull_request:
-    paths:
-      - 'tql/**.tql'
   workflow_dispatch:
 
 
