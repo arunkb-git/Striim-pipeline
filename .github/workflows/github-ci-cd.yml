@@ -17,7 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # - name: Validate TQL file
+      #   run: |
+      #    echo "Scanning tql/ folder..."
+      #     TQL_COUNT=$(find tql/ -name "*.tql" | wc -l)
+      #     echo "Found $TQL_COUNT TQL file(s)"
+
+      #     if [[ $TQL_COUNT -eq 0 ]]; then
+      #       echo "ERROR: No .tql files found in tql/ folder"
+      #       exit 1
+      #     fi
       - name: Validate TQL file
+        shell: bash
         run: |
           echo "Scanning tql/ folder..."
           TQL_COUNT=$(find tql/ -name "*.tql" | wc -l)
