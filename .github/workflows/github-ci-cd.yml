@@ -5,7 +5,6 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
-
 jobs:
   validate-tql:
     runs-on:
@@ -17,53 +16,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # - name: Validate TQL file
-      #   run: |
-      #    echo "Scanning tql/ folder..."
-      #     TQL_COUNT=$(find tql/ -name "*.tql" | wc -l)
-      #     echo "Found $TQL_COUNT TQL file(s)"
-
-      #     if [[ $TQL_COUNT -eq 0 ]]; then
-      #       echo "ERROR: No .tql files found in tql/ folder"
-      #       exit 1
-      #     fi
-      - name: Validate TQL file
-        shell: bash
+      - name: Validate TQL files
+        shell: pwsh
         run: |
-          echo "Scanning tql/ folder..."
-          TQL_COUNT=$(find tql/ -name "*.tql" | wc -l)
-          echo "Found $TQL_COUNT TQL file(s)"
+          $tqlFiles = Get-ChildItem -Path "tql/" -Filter "*.tql" -Recurse
+          $count = $tqlFiles.Count
+          Write-Host "Found $count TQL file(s)"
 
-          if [[ $TQL_COUNT -eq 0 ]]; then
-            echo "ERROR: No .tql files found in tql/ folder"
+          if ($count -eq 0) {
+            Write-Error "No .tql files found in tql/ folder"
             exit 1
-          fi
+          }
 
-          find tql/ -name "*.tql" | while read FILE; do
-            echo "--- Checking: $FILE ---"
+          foreach ($file in $tqlFiles) {
+            Write-Host "--- Checking: $($file.Name) ---"
+            $content = Get-Content $file.FullName -Raw
 
-            grep -q "CREATE APPLICATION" "$FILE" \
-              || { echo "ERROR: Missing CREATE APPLICATION in $FILE"; exit 1; }
+            if ($content -notmatch "CREATE APPLICATION") {
+              Write-Error "Missing CREATE APPLICATION in $($file.Name)"
+              exit 1
+            }
+            if ($content -notmatch "END APPLICATION") {
+              Write-Error "Missing END APPLICATION in $($file.Name)"
+              exit 1
+            }
+            if ($content -match "password\s*=\s*['""][^'""]{3,}") {
+              Write-Warning "Possible plaintext password in $($file.Name)"
+            }
 
-            grep -q "END APPLICATION" "$FILE" \
-              || { echo "ERROR: Missing END APPLICATION in $FILE"; exit 1; }
-
-            grep -iE "password\s*=\s*['\"][^'\"]{3,}" "$FILE" \
-              && echo "WARN: Possible plaintext password in $FILE" || true
-
-            echo "$FILE is valid"
-          done
+            Write-Host "$($file.Name) is valid"
+          }
 
       - name: Show app names in TQL
+        shell: pwsh
         run: |
-          echo "Apps defined in TQL:"
-          grep -h "CREATE APPLICATION" tql/*.tql \
-            | sed 's/CREATE APPLICATION //' \
-            | sed 's/;//'
+          Write-Host "Apps defined in TQL:"
+          Get-ChildItem -Path "tql/" -Filter "*.tql" | ForEach-Object {
+            Get-Content $_.FullName |
+              Where-Object { $_ -match "CREATE APPLICATION" } |
+              ForEach-Object {
+                ($_ -replace "CREATE APPLICATION\s*", "") -replace ";", ""
+              }
+          }
 
   deploy:
     name: Deploy TQL to Striim
-    runs-on: self-hosted
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - label-6
     needs: validate-tql
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     environment:
@@ -80,177 +82,239 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Python requests
-        run: pip install requests --quiet
-
-
-      - name: Stop existing app
+      - name: Stop existing apps
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred" }
+          $apps    = $env:STRIIM_APPS -split ";"
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
+          foreach ($app in $apps) {
+            $app = $app.Trim()
+            if (-not $app) { continue }
 
-          for app in apps:
-            app = app.strip()
-            r = requests.get(f"{base_url}/applications/{app}", auth=auth)
-            if r.status_code == 404:
-              print(f"  [{app}] not found, skipping stop.")
+            try {
+              $r = Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get
+              $status = $r.status
+            } catch {
+              if ($_.Exception.Response.StatusCode -eq 404) {
+                Write-Host "  [$app] not found, skipping stop."
+                continue
+              }
+              throw
+            }
+
+            if ($status -notin @("RUNNING","DEPLOYED")) {
+              Write-Host "  [$app] status=$status, skipping stop."
               continue
-            status = r.json().get("status", "")
-            if status not in ("RUNNING", "DEPLOYED"):
-              print(f"  [{app}] status={status}, skipping stop.")
-              continue
-            r = requests.put(f"{base_url}/applications/{app}/stop", auth=auth)
-            if r.ok:
-              print(f"Application {app} stopped succesfully!")
-            else:
-              print(f"ERROR stopping {app}: {r.text}")
-              sys.exit(1)
-          EOF
+            }
 
-      - name: Undeploy existing app
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/stop" -Headers $headers -Method Put
+              Write-Host "  [$app] stopped successfully!"
+            } catch {
+              Write-Error "ERROR stopping $app : $_"
+              exit 1
+            }
+          }
+
+      - name: Undeploy existing apps
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred" }
+          $apps    = $env:STRIIM_APPS -split ";"
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
+          foreach ($app in $apps) {
+            $app = $app.Trim()
+            if (-not $app) { continue }
 
-          for app in apps:
-            app = app.strip()
-            r = requests.get(f"{base_url}/applications/{app}", auth=auth)
-            if r.status_code == 404:
-              print(f"  [{app}] not found, skipping undeploy.")
+            try {
+              $r = Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get
+              $status = $r.status
+            } catch {
+              if ($_.Exception.Response.StatusCode -eq 404) {
+                Write-Host "  [$app] not found, skipping undeploy."
+                continue
+              }
+              throw
+            }
+
+            if ($status -in @("CREATED","NOT_FOUND")) {
+              Write-Host "  [$app] not deployed, skipping undeploy."
               continue
-            status = r.json().get("status", "")
-            if status in ("CREATED", "NOT_FOUND"):
-              print(f"  [{app}] not deployed, skipping undeploy.")
-              continue
-            r = requests.put(f"{base_url}/applications/{app}/undeploy", auth=auth)
-            if r.ok:
-              print(f"Application {app} undeployed succesfully!")
-            else:
-              print(f"ERROR undeploying {app}: {r.text}")
-              sys.exit(1)
-          EOF
+            }
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/undeploy" -Headers $headers -Method Put
+              Write-Host "  [$app] undeployed successfully!"
+            } catch {
+              Write-Error "ERROR undeploying $app : $_"
+              exit 1
+            }
+          }
+
+      - name: Delete existing apps
+        shell: pwsh
+        run: |
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred" }
+          $apps    = $env:STRIIM_APPS -split ";"
+
+          foreach ($app in $apps) {
+            $app = $app.Trim()
+            if (-not $app) { continue }
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get
+            } catch {
+              if ($_.Exception.Response.StatusCode -eq 404) {
+                Write-Host "  [$app] not found, skipping delete."
+                continue
+              }
+              throw
+            }
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Delete
+              Write-Host "  [$app] deleted successfully!"
+            } catch {
+              Write-Error "ERROR deleting $app : $_"
+              exit 1
+            }
+          }
 
       - name: Import TQL into Striim
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred"; "Content-Type" = "text/plain" }
+          $apps    = $env:STRIIM_APPS -split ";"
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
+          foreach ($app in $apps) {
+            $app     = $app.Trim()
+            if (-not $app) { continue }
+            $appName = $app.Split(".")[-1]
+            $tqlPath = "tql/$appName.tql"
 
-          for app in apps:
-            app      = app.strip()
-            app_name = app.split(".")[-1]          
-            tql_path = f"tql/{app_name}.tql"
+            if (-not (Test-Path $tqlPath)) {
+              Write-Error "TQL file not found: $tqlPath"
+              exit 1
+            }
 
-            if not os.path.exists(tql_path):
-              print(f"ERROR: TQL file not found at {tql_path}")
-              sys.exit(1)
+            $tqlContent = Get-Content $tqlPath -Raw
 
-            with open(tql_path, "r") as f:
-              tql_content = f.read()
+            try {
+              Invoke-RestMethod "$baseUrl/applications" `
+                -Headers $headers `
+                -Method Post `
+                -Body $tqlContent
+              Write-Host "  [$app] imported successfully!"
+            } catch {
+              Write-Error "ERROR importing $app : $_"
+              exit 1
+            }
+          }
 
-            r = requests.post(
-              f"{base_url}/applications",
-              auth=auth,
-              headers={"Content-Type": "text/plain"},
-              data=tql_content
-            )
-            if r.ok:
-              print(f"Application {app} imported succesfully!")
-            else:
-              print(f"ERROR importing {app}: {r.text}")
-              sys.exit(1)
-          EOF
-
-      - name: Deploy app
+      - name: Deploy apps
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred" }
+          $apps    = $env:STRIIM_APPS -split ";"
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
+          foreach ($app in $apps) {
+            $app = $app.Trim()
+            if (-not $app) { continue }
 
-          for app in apps:
-            app = app.strip()
-            r = requests.put(f"{base_url}/applications/{app}/deploy", auth=auth)
-            if r.ok:
-              print(f"Application {app} deployed succesfully!")
-            else:
-              print(f"ERROR deploying {app}: {r.text}")
-              sys.exit(1)
-          EOF
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/deploy" -Headers $headers -Method Put
+              Write-Host "  [$app] deployed successfully!"
+            } catch {
+              Write-Error "ERROR deploying $app : $_"
+              exit 1
+            }
+          }
 
-      - name: Start app
+      - name: Start apps
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys
+          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred    = [Convert]::ToBase64String(
+                       [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers = @{ Authorization = "Basic $cred" }
+          $apps    = $env:STRIIM_APPS -split ";"
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
+          foreach ($app in $apps) {
+            $app = $app.Trim()
+            if (-not $app) { continue }
 
-          for app in apps:
-            app = app.strip()
-            r = requests.put(f"{base_url}/applications/{app}/start", auth=auth)
-            if r.ok:
-              print(f"Application {app} started succesfully!")
-            else:
-              print(f"ERROR starting {app}: {r.text}")
-              sys.exit(1)
-          EOF
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/start" -Headers $headers -Method Put
+              Write-Host "  [$app] started successfully!"
+            } catch {
+              Write-Error "ERROR starting $app : $_"
+              exit 1
+            }
+          }
 
-      - name: Verify app is RUNNING
+      - name: Verify apps are RUNNING
+        shell: pwsh
         run: |
-          python3 - << 'EOF'
-          import requests, os, sys, time
+          $baseUrl  = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $cred     = [Convert]::ToBase64String(
+                        [Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+          $headers  = @{ Authorization = "Basic $cred" }
+          $apps     = $env:STRIIM_APPS -split ";"
+          $timeout  = 120
+          $interval = 5
+          $elapsed  = 0
 
-          server   = os.environ["STRIIM_HOST"] + ":" + os.environ["STRIIM_PORT"]
-          auth     = (os.environ["STRIIM_USER"], os.environ["STRIIM_PASSWORD"])
-          apps     = os.environ["STRIIM_APPS"].split(";")
-          base_url = f"http://{server}/api/v2"
-          timeout  = 120
-          interval = 5
-          elapsed  = 0
+          Write-Host "Waiting for apps to reach RUNNING (timeout=$timeout s)..."
 
-          print(f"Waiting for apps to reach RUNNING (timeout={timeout}s)...")
+          while ($elapsed -lt $timeout) {
+            $allOk  = $true
+            $pending = @()
 
-          while elapsed < timeout:
-            all_ok = True
-            pending = []
-            for app in apps:
-              app    = app.strip()
-              r      = requests.get(f"{base_url}/applications/{app}", auth=auth)
-              status = r.json().get("status", "UNKNOWN") if r.ok else "ERROR"
-              if status == "RUNNING":
-                print(f"  ✓ {app} → RUNNING")
-              else:
-                all_ok = False
-                pending.append(f"{app}:{status}")
+            foreach ($app in $apps) {
+              $app = $app.Trim()
+              if (-not $app) { continue }
 
-            if all_ok:
-              print("\nAll applications RUNNING — deployment successful!")
-              sys.exit(0)
+              try {
+                $r      = Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get
+                $status = $r.status
+              } catch {
+                $status = "ERROR"
+              }
 
-            print(f"  Waiting... ({elapsed}s) Pending: {pending}")
-            time.sleep(interval)
-            elapsed += interval
+              if ($status -eq "RUNNING") {
+                Write-Host "  [OK] $app is RUNNING"
+              } else {
+                $allOk = $false
+                $pending += "$app($status)"
+              }
+            }
 
-          print(f"\nERROR: Apps did not reach RUNNING within {timeout}s: {pending}")
-          sys.exit(1)
-          EOF
+            if ($allOk) {
+              Write-Host ""
+              Write-Host "All applications RUNNING - deployment successful!"
+              exit 0
+            }
+
+            Write-Host "  Waiting... ($elapsed s) Pending: $($pending -join ', ')"
+            Start-Sleep -Seconds $interval
+            $elapsed += $interval
+          }
+
+          Write-Error "Apps did not reach RUNNING within $timeout s: $($pending -join ', ')"
+          exit 1
