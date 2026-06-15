@@ -2,7 +2,7 @@ name: Striim TQL CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
@@ -39,18 +39,7 @@ jobs:
             }
             Write-Host "$($file.Name) is valid"
           }
-      - name: Debug connectivity
-        shell: powershell
-        run: |
-          Write-Host "HOST=[$env:STRIIM_HOST] PORT=[$env:STRIIM_PORT]"
-          Write-Host "Running as: $(whoami)"
-          Test-NetConnection -ComputerName $env:STRIIM_HOST -Port $env:STRIIM_PORT
-          try {
-            $r = Invoke-RestMethod "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2/applications" -Method Get -TimeoutSec 10
-            Write-Host "API reachable. Response type: $($r.GetType().Name)"
-          } catch {
-            Write-Host "API call failed: $($_.Exception.Message)"
-          }
+
   deploy:
     name: Deploy TQL to Striim
     runs-on:
@@ -60,12 +49,10 @@ jobs:
       - label-6
     needs: validate-tql
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
 
     env:
-      STRIIM_HOST: ${{ github.ref == 'refs/heads/main' && vars.STRIIM_PROD_HOST || vars.STRIIM_STAGING_HOST }}
-      STRIIM_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.STRIIM_PASSWORD_PROD || secrets.STRIIM_PASSWORD_STAGING }}
+      STRIIM_HOST: ${{ vars.STRIIM_HOST }}
+      STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
       STRIIM_PORT: ${{ vars.STRIIM_PORT || '9080' }}
       STRIIM_USER: ${{ vars.STRIIM_USER || 'admin' }}
       STRIIM_APPS: ${{ vars.STRIIM_APPS }}
@@ -74,10 +61,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Debug connectivity
+        shell: powershell
+        run: |
+          Write-Host "HOST=[$env:STRIIM_HOST] PORT=[$env:STRIIM_PORT]"
+          Write-Host "APPS=[$env:STRIIM_APPS]"
+          Write-Host "Running as: $(whoami)"
+          if (-not $env:STRIIM_HOST) {
+            Write-Error "STRIIM_HOST is empty - set the STRIIM_HOST variable in Settings > Secrets and variables > Actions"
+            exit 1
+          }
+          Test-NetConnection -ComputerName $env:STRIIM_HOST -Port $env:STRIIM_PORT
+
       - name: Tear down existing apps
         shell: powershell
         run: |
-          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
           $cred    = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
           $headers = @{ Authorization = "Basic $cred" }
           $apps    = $env:STRIIM_APPS -split ";"
@@ -108,7 +107,7 @@ jobs:
       - name: Import, deploy and start apps
         shell: powershell
         run: |
-          $baseUrl = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
           $cred    = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
           $headers = @{ Authorization = "Basic $cred" }
           $apps    = $env:STRIIM_APPS -split ";"
@@ -130,7 +129,7 @@ jobs:
       - name: Verify apps are RUNNING
         shell: powershell
         run: |
-          $baseUrl  = "http://$env:STRIIM_HOST:$env:STRIIM_PORT/api/v2"
+          $baseUrl  = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
           $cred     = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
           $headers  = @{ Authorization = "Basic $cred" }
           $apps     = $env:STRIIM_APPS -split ";"
