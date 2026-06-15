@@ -2,7 +2,7 @@ name: Striim TQL CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
