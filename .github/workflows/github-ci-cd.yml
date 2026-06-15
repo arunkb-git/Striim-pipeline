@@ -100,7 +100,7 @@ jobs:
       - name: Test Striim authentication
         shell: powershell
         run: |
-          $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
+          $baseUrl = "http://${env:STRIIM_HOST}:${env:STRIIM_PORT}/api/v2"
 
           $plainCred = "${env:STRIIM_USER}:${env:STRIIM_PASSWORD}"
           $cred = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($plainCred))
