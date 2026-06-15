@@ -12,6 +12,7 @@ jobs:
       - Windows
       - X64
       - label-6
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,23 +21,31 @@ jobs:
         shell: powershell
         run: |
           $tqlFiles = Get-ChildItem -Path "tql/" -Filter "*.tql" -Recurse
+
           if ($tqlFiles.Count -eq 0) {
             Write-Error "No .tql files found in tql/ folder"
             exit 1
           }
+
           Write-Host "Found $($tqlFiles.Count) TQL file(s)"
 
           foreach ($file in $tqlFiles) {
             $content = Get-Content $file.FullName -Raw
+
             if ($content -notmatch "CREATE APPLICATION") {
-              Write-Error "Missing CREATE APPLICATION in $($file.Name)"; exit 1
+              Write-Error "Missing CREATE APPLICATION in $($file.Name)"
+              exit 1
             }
+
             if ($content -notmatch "END APPLICATION") {
-              Write-Error "Missing END APPLICATION in $($file.Name)"; exit 1
+              Write-Error "Missing END APPLICATION in $($file.Name)"
+              exit 1
             }
+
             if ($content -match "password\s*=\s*['""][^'""]{3,}") {
               Write-Warning "Possible plaintext password in $($file.Name)"
             }
+
             Write-Host "$($file.Name) is valid"
           }
 
@@ -47,14 +56,15 @@ jobs:
       - Windows
       - X64
       - label-6
+
     needs: validate-tql
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/main'
 
     env:
       STRIIM_HOST: ${{ vars.STRIIM_HOST }}
-      STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
       STRIIM_PORT: ${{ vars.STRIIM_PORT || '9080' }}
       STRIIM_USER: ${{ vars.STRIIM_USER || 'admin' }}
+      STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
       STRIIM_APPS: ${{ vars.STRIIM_APPS }}
 
     steps:
@@ -64,95 +74,238 @@ jobs:
       - name: Debug connectivity
         shell: powershell
         run: |
-          Write-Host "HOST=[$env:STRIIM_HOST] PORT=[$env:STRIIM_PORT]"
+          Write-Host "HOST=[$env:STRIIM_HOST]"
+          Write-Host "PORT=[$env:STRIIM_PORT]"
+          Write-Host "USER=[$env:STRIIM_USER]"
           Write-Host "APPS=[$env:STRIIM_APPS]"
           Write-Host "Running as: $(whoami)"
+
           if (-not $env:STRIIM_HOST) {
-            Write-Error "STRIIM_HOST is empty - set the STRIIM_HOST variable in Settings > Secrets and variables > Actions"
+            Write-Error "STRIIM_HOST is empty"
             exit 1
           }
+
+          if (-not $env:STRIIM_PASSWORD) {
+            Write-Error "STRIIM_PASSWORD is empty or secret is not configured"
+            exit 1
+          }
+
+          if (-not $env:STRIIM_APPS) {
+            Write-Error "STRIIM_APPS is empty. Example: Global.MyApp"
+            exit 1
+          }
+
           Test-NetConnection -ComputerName $env:STRIIM_HOST -Port $env:STRIIM_PORT
+
+      - name: Test Striim authentication
+        shell: powershell
+        run: |
+          $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
+
+          $plainCred = "${env:STRIIM_USER}:${env:STRIIM_PASSWORD}"
+          $cred = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($plainCred))
+          $headers = @{ Authorization = "Basic $cred" }
+
+          try {
+            Invoke-RestMethod "$baseUrl/applications" -Headers $headers -Method Get
+            Write-Host "Striim authentication successful"
+          } catch {
+            $code = $_.Exception.Response.StatusCode.value__
+            Write-Error "Striim authentication failed. HTTP Status: $code. Check STRIIM_USER, STRIIM_PASSWORD and user permissions."
+            exit 1
+          }
 
       - name: Tear down existing apps
         shell: powershell
         run: |
           $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
-          $cred    = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+
+          $plainCred = "${env:STRIIM_USER}:${env:STRIIM_PASSWORD}"
+          $cred = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($plainCred))
           $headers = @{ Authorization = "Basic $cred" }
-          $apps    = $env:STRIIM_APPS -split ";"
+
+          $apps = $env:STRIIM_APPS -split ";"
 
           foreach ($app in $apps) {
             $app = $app.Trim()
-            if (-not $app) { continue }
+
+            if (-not $app) {
+              continue
+            }
+
+            Write-Host "Processing app: [$app]"
 
             try {
-              $status = (Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get).status
+              $appResponse = Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get
+              $status = $appResponse.status
+              Write-Host "Current status of [$app]: $status"
             } catch {
-              if ($_.Exception.Response.StatusCode -eq 404) { Write-Host "  [$app] not found, skipping."; continue }
-              throw
+              $code = $_.Exception.Response.StatusCode.value__
+
+              if ($code -eq 404) {
+                Write-Host "[$app] not found. Skipping teardown."
+                continue
+              }
+
+              if ($code -eq 403) {
+                Write-Error "403 Forbidden for [$app]. User [$env:STRIIM_USER] does not have access. Check namespace/app name and permissions."
+                exit 1
+              }
+
+              Write-Error "Failed to get status for [$app]. HTTP Status: $code"
+              exit 1
             }
 
-            if ($status -in @("RUNNING","DEPLOYED")) {
-              Invoke-RestMethod "$baseUrl/applications/$app/stop" -Headers $headers -Method Put
-              Write-Host "  [$app] stopped"
+            if ($status -eq "RUNNING") {
+              try {
+                Invoke-RestMethod "$baseUrl/applications/$app/stop" -Headers $headers -Method Put
+                Write-Host "[$app] stopped"
+                Start-Sleep -Seconds 5
+              } catch {
+                $code = $_.Exception.Response.StatusCode.value__
+                Write-Error "Failed to stop [$app]. HTTP Status: $code"
+                exit 1
+              }
             }
-            if ($status -notin @("CREATED","NOT_FOUND")) {
-              Invoke-RestMethod "$baseUrl/applications/$app/undeploy" -Headers $headers -Method Put
-              Write-Host "  [$app] undeployed"
+
+            if ($status -in @("RUNNING", "DEPLOYED")) {
+              try {
+                Invoke-RestMethod "$baseUrl/applications/$app/undeploy" -Headers $headers -Method Put
+                Write-Host "[$app] undeployed"
+                Start-Sleep -Seconds 5
+              } catch {
+                $code = $_.Exception.Response.StatusCode.value__
+                Write-Error "Failed to undeploy [$app]. HTTP Status: $code"
+                exit 1
+              }
             }
-            Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Delete
-            Write-Host "  [$app] deleted"
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Delete
+              Write-Host "[$app] deleted"
+            } catch {
+              $code = $_.Exception.Response.StatusCode.value__
+
+              if ($code -eq 404) {
+                Write-Host "[$app] already deleted"
+                continue
+              }
+
+              if ($code -eq 403) {
+                Write-Error "403 Forbidden while deleting [$app]. User [$env:STRIIM_USER] needs delete permission."
+                exit 1
+              }
+
+              Write-Error "Failed to delete [$app]. HTTP Status: $code"
+              exit 1
+            }
           }
 
       - name: Import, deploy and start apps
         shell: powershell
         run: |
           $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
-          $cred    = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
+
+          $plainCred = "${env:STRIIM_USER}:${env:STRIIM_PASSWORD}"
+          $cred = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($plainCred))
           $headers = @{ Authorization = "Basic $cred" }
-          $apps    = $env:STRIIM_APPS -split ";"
+
+          $apps = $env:STRIIM_APPS -split ";"
 
           foreach ($app in $apps) {
             $app = $app.Trim()
-            if (-not $app) { continue }
+
+            if (-not $app) {
+              continue
+            }
+
             $appName = $app.Split(".")[-1]
             $tqlPath = "tql/$appName.tql"
 
-            if (-not (Test-Path $tqlPath)) { Write-Error "TQL file not found: $tqlPath"; exit 1 }
+            Write-Host "Importing app [$app] from file [$tqlPath]"
 
-            Invoke-RestMethod "$baseUrl/applications" -Headers ($headers + @{ "Content-Type" = "text/plain" }) -Method Post -Body (Get-Content $tqlPath -Raw)
-            Invoke-RestMethod "$baseUrl/applications/$app/deploy" -Headers $headers -Method Put
-            Invoke-RestMethod "$baseUrl/applications/$app/start"  -Headers $headers -Method Put
-            Write-Host "  [$app] imported, deployed and started"
+            if (-not (Test-Path $tqlPath)) {
+              Write-Error "TQL file not found: $tqlPath"
+              exit 1
+            }
+
+            try {
+              $tqlContent = Get-Content $tqlPath -Raw
+              Invoke-RestMethod "$baseUrl/applications" `
+                -Headers ($headers + @{ "Content-Type" = "text/plain" }) `
+                -Method Post `
+                -Body $tqlContent
+
+              Write-Host "[$app] imported"
+            } catch {
+              $code = $_.Exception.Response.StatusCode.value__
+              Write-Error "Failed to import [$app]. HTTP Status: $code"
+              exit 1
+            }
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/deploy" -Headers $headers -Method Put
+              Write-Host "[$app] deployed"
+            } catch {
+              $code = $_.Exception.Response.StatusCode.value__
+              Write-Error "Failed to deploy [$app]. HTTP Status: $code"
+              exit 1
+            }
+
+            try {
+              Invoke-RestMethod "$baseUrl/applications/$app/start" -Headers $headers -Method Put
+              Write-Host "[$app] started"
+            } catch {
+              $code = $_.Exception.Response.StatusCode.value__
+              Write-Error "Failed to start [$app]. HTTP Status: $code"
+              exit 1
+            }
           }
 
       - name: Verify apps are RUNNING
         shell: powershell
         run: |
-          $baseUrl  = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
-          $cred     = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("$env:STRIIM_USER:$env:STRIIM_PASSWORD"))
-          $headers  = @{ Authorization = "Basic $cred" }
-          $apps     = $env:STRIIM_APPS -split ";"
-          $timeout  = 120; $interval = 5; $elapsed = 0
+          $baseUrl = "http://$($env:STRIIM_HOST):$($env:STRIIM_PORT)/api/v2"
+
+          $plainCred = "${env:STRIIM_USER}:${env:STRIIM_PASSWORD}"
+          $cred = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($plainCred))
+          $headers = @{ Authorization = "Basic $cred" }
+
+          $apps = $env:STRIIM_APPS -split ";"
+          $timeout = 120
+          $interval = 5
+          $elapsed = 0
 
           while ($elapsed -lt $timeout) {
             $pending = @()
+
             foreach ($app in $apps) {
               $app = $app.Trim()
-              if (-not $app) { continue }
-              try { $status = (Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get).status }
-              catch { $status = "ERROR" }
-              if ($status -ne "RUNNING") { $pending += "$app($status)" }
+
+              if (-not $app) {
+                continue
+              }
+
+              try {
+                $status = (Invoke-RestMethod "$baseUrl/applications/$app" -Headers $headers -Method Get).status
+              } catch {
+                $status = "ERROR"
+              }
+
+              if ($status -ne "RUNNING") {
+                $pending += "$app($status)"
+              }
             }
 
             if ($pending.Count -eq 0) {
               Write-Host "All applications RUNNING - deployment successful!"
               exit 0
             }
-            Write-Host "  Waiting... ($elapsed s) Pending: $($pending -join ', ')"
+
+            Write-Host "Waiting... $elapsed seconds. Pending: $($pending -join ', ')"
             Start-Sleep -Seconds $interval
             $elapsed += $interval
           }
 
-          Write-Error "Apps did not reach RUNNING within $timeout s: $($pending -join ', ')"
+          Write-Error "Apps did not reach RUNNING within $timeout seconds: $($pending -join ', ')"
           exit 1
