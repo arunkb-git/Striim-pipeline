@@ -60,6 +60,12 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 2
+      - name: Debug environment
+        run: |
+          where python
+          where pip
+          python --version
+          python -m pip --version
 
       # Install dependencies in virtual environment
       - name: Install dependencies
