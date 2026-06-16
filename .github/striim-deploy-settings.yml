@@ -1,0 +1,147 @@
+# Striim Deployment Settings
+deployment:
+  default_group: "default"  # Default deployment group
+  default_strategy: "one"   # Default deployment strategy (all or one)
+  single_server: true       # Single server deployment
+
+  # Application-specific deployment configurations.
+  #
+  # Besides deployment_group/strategy, an application may override these global
+  # settings for itself:
+  #   - auto_start  (overrides validation.auto_start)
+  #   - auto_deploy (overrides validation.auto_deploy)
+  #   - state_transitions.<STATE>.timeout (overrides the per-state teardown
+  #     timeout from the top-level state_transitions matrix). Only the keys you
+  #     list are overridden; everything else falls back to the global matrix.
+  applications:
+    MyApp1:
+      deployment_group: "Group1"
+      strategy: "all"  # Deploy on all servers in the group
+      auto_start: true   # Override validation.auto_start for this app
+      auto_deploy: true  # Override validation.auto_deploy for this app
+      # Give this app longer teardown waits than the global defaults.
+      state_transitions:
+        RUNNING:
+          timeout: 120
+        STOPPING:
+          timeout: 120
+      flows:
+        FlowX:
+          deployment_group: "Group2"
+          strategy: "all"
+        FlowY:
+          deployment_group: "Group3"
+          strategy: "one"  # Deploy on one server in the group
+          
+    admin.sbrTest:
+      auto_start: true
+
+# Deployment validation settings
+validation:
+  # File and directory validation
+  require_specific_directories: true
+  allowed_directories:
+    - "striim/TQL"
+  enforce_naming_convention: true
+  naming_pattern: "^[a-zA-Z][a-zA-Z0-9_-]*\\.tql$"
+  filename_mismatch: "error"  # Options: "error", "warning"
+
+  # TQL validation and processing
+  validate_syntax: true
+  # When true, any inline "namespace." prefix is removed from CREATE
+  # APPLICATION/FLOW statements in the deployed TQL, and the namespace is
+  # declared once via a generated "USE <namespace>;" line. This keeps the
+  # deployed content consistent with the resolved namespace. Application and
+  # flow names are always tracked by their bare name regardless of this flag.
+  strip_namespace_prefix: true
+  enforce_create_or_replace: true
+  create_or_replace_strategy: "auto"  # Options: "auto", "require"
+
+  # Deployment behavior
+  auto_start: false
+  auto_deploy: true
+  continue_on_error: false
+
+  # Retry and timeout settings.
+  # state_transition_timeout is the wait applied when DEPLOYING and STARTING an
+  # app (how long to wait for it to reach DEPLOYED/RUNNING). It is NOT the same
+  # as the per-state "timeout" under the state_transitions matrix below, which
+  # governs teardown waits (stop/undeploy) and can be overridden per app.
+  state_transition_timeout: 60
+  max_retries: 3
+
+# Branch to namespace mapping (Striim namespace the apps are deployed into).
+# OPTIONAL: this is only a fallback. A file's namespace is resolved per file in
+# this order: --namespace override > prefix in the TQL
+# (CREATE OR REPLACE APPLICATION admin.sbrTest) > prefix in the filename
+# (admin.sbrTest.tql) > this mapping. You can remove this section entirely if
+# every TQL file or filename carries its own namespace.
+namespace_mapping:
+  develop: "dev"
+  master: "prod"
+
+# Branch to GitHub Environment mapping.
+# Selects which GitHub Environment (and therefore which scoped
+# STRIIM_BASE_URL / STRIIM_USERNAME / STRIIM_PASSWORD secrets, i.e. which
+# target server) a branch deploys to. This is decoupled from the namespace
+# above so environments can live on different servers and need not share the
+# dev/prod naming. Define each environment under repo
+# Settings -> Environments and add the three secrets to it.
+environment_mapping:
+  develop: "dev"
+  master: "prod"
+
+# State transition settings.
+# The per-state "timeout" here is the teardown wait used when walking an app
+# back to CREATED before redeploy (e.g. how long to wait for a stop/undeploy to
+# complete). Individual apps may override any of these timeouts under
+# deployment.applications.<app>.state_transitions. This is distinct from
+# validation.state_transition_timeout, which is the deploy/start wait.
+state_transitions:
+  CREATED:
+    action: "none"
+  DEPLOYED:
+    action: "undeploy"
+    next_state: "CREATED"
+    timeout: 60
+  RUNNING:
+    action: "stop"
+    next_state: "STOPPED"
+    timeout: 30
+  STOPPED:
+    action: "undeploy"
+    next_state: "CREATED"
+    timeout: 60
+  QUIESCED:
+    action: "undeploy"
+    next_state: "CREATED"
+    timeout: 60
+  QUIESCING:
+    action: "wait"
+    next_state: "QUIESCED"
+    timeout: 120
+  STARTING:
+    action: "wait"
+    next_state: "RUNNING"
+    timeout: 60
+  STOPPING:
+    action: "wait"
+    next_state: "STOPPED"
+    timeout: 60
+  TERMINATED:
+    action: "undeploy"
+    next_state: "CREATED"
+    timeout: 60
+  HALT:
+    action: "undeploy"
+    next_state: "CREATED"
+    timeout: 60
+
+# Application pattern detection
+application_patterns:
+  - "CREATE\\s+APPLICATION\\s+([^\\s;]+)"
+  - "CREATE\\s+OR\\s+REPLACE\\s+APPLICATION\\s+([^\\s;]+)"
+
+# Logging settings
+logging:
+  level: "info"  # Options: "debug", "info", "warning", "error"

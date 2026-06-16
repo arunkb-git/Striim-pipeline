@@ -1,0 +1,10 @@
+.env
+actions-runner/
+striim/.DS_Store
+venv
+.venv
+*.pyc
+.DS_Store
+__pycache__
+.pytest_cache
+.claude/

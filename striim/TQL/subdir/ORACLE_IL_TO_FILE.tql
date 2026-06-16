@@ -1,0 +1,29 @@
+
+CREATE APPLICATION ORACLE_IL_TO_FILE USE EXCEPTIONSTORE TTL : '7d' ;
+ 
+CREATE FLOW ORACLE_IL_TO_FILE_SourceFlow;
+
+CREATE OR REPLACE SOURCE ORACLE_IL_TO_FILE_DBSource_type USING DatabaseReader ( 
+  ConnectionURL: 'jdbc:oracle:thin:@//oracle19c:1521/ORCL', 
+  CreateSchema: false,
+  QuiesceOnILCompletion: true,
+  Username: 'qatest',
+  DatabaseProviderType: 'Oracle',
+  FetchSize: 500, 
+  Password_encrypted: 'false',
+  Tables: '"QATEST"."CUSTOMER"',
+  Password: 'foobar')
+OUTPUT TO ORACLE_IL_TO_FILE_OutputStream;
+
+END FLOW ORACLE_IL_TO_FILE_SourceFlow;
+ 
+CREATE TARGET File_ORACLE_IL_TO_FILE_Target USING Global.FileWriter (  
+  flushpolicy: 'EventCount:10000,Interval:30s', 
+  rolloveronddl: true,
+  filename: 'customer',
+  rolloverpolicy: 'EventCount:10000,Interval:30s' )
+FORMAT USING Global.JSONFormatter  ( 
+ )
+INPUT FROM ORACLE_IL_TO_FILE_OutputStream;
+
+END APPLICATION ORACLE_IL_TO_FILE;

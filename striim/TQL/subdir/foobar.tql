@@ -1,0 +1,46 @@
+
+CREATE OR REPLACE APPLICATION foobar;
+
+CREATE OR REPLACE SOURCE oracle_source USING Global.OracleReader ( 
+  TransactionBufferDiskLocation: '.striim/LargeBuffer',   
+  DatabaseRole: 'PRIMARY', 
+  Compression: false, 
+  connectionRetryPolicy: 'timeOut=30, retryInterval=30, maxRetries=3', 
+  Password_encrypted: 'true', 
+  SupportPDB: false,
+  QuiesceMarkerTable: 'QUIESCEMARKER',
+  FetchSize: 1000,
+  CDDLAction: 'Process',      
+  DictionaryMode: 'OnlineCatalog',   
+  CommittedTransactions: true,   
+  QueueSize: 2048,
+  SetConservativeRange: false, 
+  CDDLCapture: false,
+  TransactionBufferType: 'Disk',  
+  Username: 'qatest',  
+  TransactionBufferSpilloverSize: '100MB',
+  ConnectionURL: 'jdbc:oracle:thin:@oracle19c:1521:ORCL', 
+  Tables: 'qatest.%',
+  Password: '9ggA1HPm9yRSZb4gsGBA6w==', 
+  FilterTransactionBoundaries: true,
+  SendBeforeImage: true )
+OUTPUT TO ORACLE_OUTPUT;
+ 
+CREATE OR REPLACE CQ CQ_DUMMY
+INSERT INTO CQ_OUT
+SELECT * FROM ORACLE_OUTPUT o;
+ 
+CREATE OR REPLACE TARGET file_target USING Global.FileWriter ( 
+  flushpolicy: 'EventCount:10000,Interval:30s',
+  rolloveronddl: true, 
+  filename: 'foobar', 
+  rolloverpolicy: 'EventCount:10000,Interval:30s' ) 
+FORMAT USING Global.ParquetFormatter  ( 
+  compressiontype: 'UNCOMPRESSED',
+  blocksize: '128000000', 
+  formatAs: 'Default', 
+  schemaFileName: 'dumy' ) 
+INPUT FROM CQ_OUT;
+
+END APPLICATION foobar;
+

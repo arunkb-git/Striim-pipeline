@@ -1,0 +1,79 @@
+name: Deploy Striim TQL
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'develop'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'GitHub Environment to deploy to (leave blank to derive from the branch)'
+        required: false
+        default: ''
+      drop_applications:
+        description: 'Comma-separated list of applications to drop before deployment'
+        required: false
+        default: ''
+      force_drop_all:
+        description: 'Drop all changed applications before deployment'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  # Map the branch (or the manual input) to a GitHub Environment. The selected
+  # environment provides the scoped STRIIM_BASE_URL/USERNAME/PASSWORD secrets,
+  # i.e. the target server, for the deploy job below.
+  resolve:
+    runs-on: self-hosted
+    outputs:
+      environment: ${{ steps.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: pip3 install -r .github/scripts/requirements.txt
+
+      - name: Resolve deployment environment
+        id: resolve
+        run: |
+          environment=$(python3 .github/scripts/resolve_environment.py \
+            --config .github/striim-deploy-settings.yml \
+            --branch "${{ github.ref_name }}" \
+            --environment "${{ github.event.inputs.environment }}")
+          echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "Resolved deployment environment: $environment"
+
+  deploy:
+    needs: resolve
+    runs-on: self-hosted
+    # Selecting the environment here scopes secrets.* to that environment's
+    # secrets, so the env block below uses constant names across all branches.
+    environment: ${{ needs.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      # Install dependencies in virtual environment
+      - name: Install dependencies
+        run: pip3 install -r .github/scripts/requirements.txt
+
+      - name: Identify Changed Files
+        id: identify_changes
+        run: python3 .github/scripts/detect_changes.py
+
+      - name: Deploy Changed TQL Files
+        if: steps.identify_changes.outputs.has_changes == 'true'
+        run: |
+          python3 .github/scripts/deploy_striim.py \
+            --config .github/striim-deploy-settings.yml \
+            --files "${{ steps.identify_changes.outputs.changed_files }}" \
+            --branch ${{ github.ref_name }} \
+            ${{ github.event.inputs.drop_applications != '' && format('--drop-applications "{0}"', github.event.inputs.drop_applications) || '' }} \
+            ${{ github.event.inputs.force_drop_all == 'true' && '--force-drop-all' || '' }}
+        env:
+          STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
+          STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
+          STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
