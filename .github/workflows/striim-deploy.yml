@@ -69,11 +69,11 @@ jobs:
 
       # Install dependencies in virtual environment
       - name: Install dependencies
-        run: pip3 install -r .github/scripts/requirements.txt
+        run: python -m pip install -r .github/scripts/requirements.txt
 
       - name: Identify Changed Files
         id: identify_changes
-        run: python3 .github/scripts/detect_changes.py
+        run: python -m .github/scripts/detect_changes.py
 
       - name: Deploy Changed TQL Files
         if: steps.identify_changes.outputs.has_changes == 'true'
