@@ -79,6 +79,7 @@ validation:
 namespace_mapping:
   develop: "dev"
   master: "prod"
+  production: "prod"
 
 # Branch to GitHub Environment mapping.
 # Selects which GitHub Environment (and therefore which scoped
@@ -90,6 +91,7 @@ namespace_mapping:
 environment_mapping:
   develop: "dev"
   master: "prod"
+  production: "production"
 
 # State transition settings.
 # The per-state "timeout" here is the teardown wait used when walking an app
