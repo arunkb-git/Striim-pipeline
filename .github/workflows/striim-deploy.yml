@@ -71,26 +71,6 @@ jobs:
           Write-Host "Resolved deployment environment: $envName"
           "environment=$envName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-  deploy:
-    needs: resolve
-    runs-on:
-      - self-hosted
-      - label-6
-    environment: ${{ needs.resolve.outputs.environment }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
-
-      - name: Install dependencies
-        run: python -m pip install -r .github/scripts/requirements.txt
-
-      - name: Identify Changed Files
-        id: identify_changes
-        run: python .github/scripts/detect_changes.py
 
       - name: Deploy Changed TQL Files
         if: steps.identify_changes.outputs.has_changes == 'true'
@@ -105,4 +85,40 @@ jobs:
           STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
           STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
           STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
+
+
+  # deploy:
+  #   needs: resolve
+  #   runs-on:
+  #     - self-hosted
+  #     - label-6
+  #   environment: ${{ needs.resolve.outputs.environment }}
+  #   steps:
+  #     - uses: actions/checkout@v5
+
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.14'
+
+  #     - name: Install dependencies
+  #       run: python -m pip install -r .github/scripts/requirements.txt
+
+  #     - name: Identify Changed Files
+  #       id: identify_changes
+  #       run: python .github/scripts/detect_changes.py
+
+  #     - name: Deploy Changed TQL Files
+  #       if: steps.identify_changes.outputs.has_changes == 'true'
+  #       run: >-
+  #         python .github/scripts/deploy_striim.py
+  #         --config ".github/striim-deploy-settings.yml"
+  #         --files "${{ steps.identify_changes.outputs.changed_files }}"
+  #         --branch "${{ github.ref_name }}"
+  #         ${{ github.event.inputs.drop_applications != '' && format('--drop-applications "{0}"', github.event.inputs.drop_applications) || '' }}
+  #         ${{ github.event.inputs.force_drop_all == 'true' && '--force-drop-all' || '' }}
+  #       env:
+  #         STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
+  #         STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
+  #         STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
 
