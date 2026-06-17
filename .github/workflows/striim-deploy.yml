@@ -21,30 +21,49 @@ on:
         default: false
 
 jobs:
-  # Map the branch (or the manual input) to a GitHub Environment. The selected
-  # environment provides the scoped STRIIM_BASE_URL/USERNAME/PASSWORD secrets,
-  # i.e. the target server, for the deploy job below.
+  # Resolve the branch/manual input into a GitHub Environment first. This
+  # scopes the deploy job's secrets to the correct target server.
   resolve:
     runs-on:
       - self-hosted
       - label-6
     outputs:
-      environment: ${{ steps.resolve.outputs.environment }}
+      environment: ${{ steps.resolve_env.outputs.environment }}
     steps:
       - uses: actions/checkout@v5
 
-      - name: Ensure Python is available
-        run: |
-          where python
-          python --version
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.16'
 
-      - name: Verify Python and pip
-        run: |
-          python -m ensurepip --upgrade
-          python -m pip --version
+      - name: Install dependencies
+        run: python -m pip install -r .github/scripts/requirements.txt
 
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
+      - name: Resolve deployment environment
+        id: resolve_env
+        shell: pwsh
+        run: |
+          $envName = python .github/scripts/resolve_environment.py `
+            --config .github/striim-deploy-settings.yml `
+            --branch "${{ github.ref_name }}" `
+            --environment "${{ github.event.inputs.environment }}"
+          Write-Host "Resolved deployment environment: $envName"
+          "environment=$envName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+  deploy:
+    needs: resolve
+    runs-on:
+      - self-hosted
+      - label-6
+    environment: ${{ needs.resolve.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: Install dependencies
         run: python -m pip install -r .github/scripts/requirements.txt
@@ -66,37 +85,4 @@ jobs:
           STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
           STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
           STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
-
-      # - name: Resolve deployment environment
-      #   id: resolve
-      #   run: |
-      #     environment=$(python3 .github/scripts/resolve_environment.py \
-      #       --config .github/striim-deploy-settings.yml \
-      #       --branch "${{ github.ref_name }}" \
-      #       --environment "${{ github.event.inputs.environment }}")
-      #     echo "environment=$environment" >> "$GITHUB_OUTPUT"
-      #     echo "Resolved deployment environment: $environment"
-
-  # deploy:
-  #   needs: resolve
-  #   runs-on:
-  #     - self-hosted
-  #     - label-6
-  #   # Selecting the environment here scopes secrets.* to that environment's
-  #   # secrets, so the env block below uses constant names across all branches.
-  #   environment: ${{ needs.resolve.outputs.environment }}
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #       with:
-  #         fetch-depth: 2
-  #     - name: Debug environment
-  #       run: |
-  #         where python
-  #         where pip
-  #         python --version
-  #         python -m pip --version
-
-  #     # Install dependencies in virtual environment
-  #     - name: Install dependencies
-  #       run: python -m pip install -r .github/scripts/requirements.txt
 
