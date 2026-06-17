@@ -33,17 +33,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
+      - name: Ensure Python is available
+        shell: pwsh
+        run: |
+          if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+            throw "Python executable was not found on this runner."
+          }
 
       - name: Verify Python and pip
+        shell: pwsh
         run: |
           python --version
+          python -m ensurepip --upgrade
           python -m pip --version
 
       - name: Upgrade pip
+        shell: pwsh
         run: python -m pip install --upgrade pip
 
       - name: Install dependencies
