@@ -23,7 +23,7 @@ on:
 jobs:
   # Map the branch (or the manual input) to a GitHub Environment. The selected
   # environment provides the scoped STRIIM_BASE_URL/USERNAME/PASSWORD secrets,
-  # i.e. the target server, for the deploy job below.
+  # i.e. the target server, for the deploy job below
   resolve:
     runs-on:
       - self-hosted
