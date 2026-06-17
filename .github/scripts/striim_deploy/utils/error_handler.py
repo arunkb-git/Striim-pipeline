@@ -252,6 +252,14 @@ def log_error_response(
             logger.error("-" * 60)
             return
 
+        # Fall back to logging the payload itself if the response is empty or
+        # not structured enough to show a specific message.
+        logger.error("-" * 60)
+        logger.error("UNHANDLED ERROR RESPONSE:")
+        logger.error("  %s", response)
+        logger.error("-" * 60)
+        return
+
     # Handle string responses
     if isinstance(response, str):
         logger.error("-" * 60)
@@ -264,5 +272,8 @@ def log_error_response(
         logger.error("-" * 60)
         return
 
-    # Handle unexpected response types
-    logger.error("Unexpected error response format: %s", type(response))
+    # Handle empty / unexpected response types
+    logger.error("-" * 60)
+    logger.error("UNEXPECTED ERROR RESPONSE:")
+    logger.error("  type=%s value=%r", type(response), response)
+    logger.error("-" * 60)
