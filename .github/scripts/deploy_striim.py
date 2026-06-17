@@ -1,6 +1,5 @@
 """
 Striim TQL deployment tool.
-
 Command-line utility for deploying TQL files to Striim instances with
 namespace mapping, authentication, and settings management.
 """
