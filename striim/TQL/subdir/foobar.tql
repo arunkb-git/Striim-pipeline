@@ -1,5 +1,4 @@
 
-
 CREATE OR REPLACE APPLICATION foobar;
 
 CREATE OR REPLACE SOURCE oracle_source USING Global.OracleReader ( 
@@ -7,7 +6,7 @@ CREATE OR REPLACE SOURCE oracle_source USING Global.OracleReader (
   DatabaseRole: 'PRIMARY', 
   Compression: false, 
   connectionRetryPolicy: 'timeOut=30, retryInterval=30, maxRetries=3', 
-  Password_encrypted: 'false', 
+  Password_encrypted: 'true', 
   SupportPDB: false,
   QuiesceMarkerTable: 'QUIESCEMARKER',
   FetchSize: 1000,
@@ -22,6 +21,7 @@ CREATE OR REPLACE SOURCE oracle_source USING Global.OracleReader (
   TransactionBufferSpilloverSize: '100MB',
   ConnectionURL: 'jdbc:oracle:thin:@oracle19c:1521:ORCL', 
   Tables: 'qatest.%',
+  Password: '9ggA1HPm9yRSZb4gsGBA6w==', 
   FilterTransactionBoundaries: true,
   SendBeforeImage: true )
 OUTPUT TO ORACLE_OUTPUT;
@@ -43,4 +43,3 @@ FORMAT USING Global.ParquetFormatter  (
 INPUT FROM CQ_OUT;
 
 END APPLICATION foobar;
-
