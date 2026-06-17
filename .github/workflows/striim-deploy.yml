@@ -3,7 +3,6 @@ name: Deploy Striim TQL
 on:
   push:
     branches:
-
       - 'production'
   workflow_dispatch:
     inputs:
@@ -34,39 +33,52 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install dependencies
-        run: python -m pip install -r .github/scripts/requirements.txt
-
-      - name: Resolve deployment environment
-        id: resolve
-        run: |
-          environment=$(python3 .github/scripts/resolve_environment.py \
-            --config .github/striim-deploy-settings.yml \
-            --branch "${{ github.ref_name }}" \
-            --environment "${{ github.event.inputs.environment }}")
-          echo "environment=$environment" >> "$GITHUB_OUTPUT"
-          echo "Resolved deployment environment: $environment"
-
-  deploy:
-    needs: resolve
-    runs-on:
-      - self-hosted
-      - label-6
-    # Selecting the environment here scopes secrets.* to that environment's
-    # secrets, so the env block below uses constant names across all branches.
-    environment: ${{ needs.resolve.outputs.environment }}
-    steps:
-      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 2
-      - name: Debug environment
+          python-version: '3.14'
+
+      - name: Verify Python and pip
         run: |
-          where python
-          where pip
           python --version
           python -m pip --version
 
-      # Install dependencies in virtual environment
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
       - name: Install dependencies
         run: python -m pip install -r .github/scripts/requirements.txt
+
+  #     - name: Resolve deployment environment
+  #       id: resolve
+  #       run: |
+  #         environment=$(python3 .github/scripts/resolve_environment.py \
+  #           --config .github/striim-deploy-settings.yml \
+  #           --branch "${{ github.ref_name }}" \
+  #           --environment "${{ github.event.inputs.environment }}")
+  #         echo "environment=$environment" >> "$GITHUB_OUTPUT"
+  #         echo "Resolved deployment environment: $environment"
+
+  # deploy:
+  #   needs: resolve
+  #   runs-on:
+  #     - self-hosted
+  #     - label-6
+  #   # Selecting the environment here scopes secrets.* to that environment's
+  #   # secrets, so the env block below uses constant names across all branches.
+  #   environment: ${{ needs.resolve.outputs.environment }}
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 2
+  #     - name: Debug environment
+  #       run: |
+  #         where python
+  #         where pip
+  #         python --version
+  #         python -m pip --version
+
+  #     # Install dependencies in virtual environment
+  #     - name: Install dependencies
+  #       run: python -m pip install -r .github/scripts/requirements.txt
 
