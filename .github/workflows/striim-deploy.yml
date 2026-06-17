@@ -86,7 +86,7 @@ jobs:
   #   needs: resolve
   #   runs-on:
   #     - self-hosted
-  #     - label-6
+  #     - label-6.
   #   environment: ${{ needs.resolve.outputs.environment }}
   #   steps:
   #     - uses: actions/checkout@v5
