@@ -29,7 +29,7 @@ jobs:
       - self-hosted
       - label-6
     outputs:
-      environment: ${{ steps.resolve.outputs.environment }}
+      environment: ${{ steps.resolve_env.outputs.environment }}
     steps:
       - uses: actions/checkout@v5
 
@@ -37,23 +37,37 @@ jobs:
         run: |
           where python
           python --version
+
       - name: Verify Python and pip
         run: |
           python -m ensurepip --upgrade
           python -m pip --version
+
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
       - name: Install dependencies
         run: python -m pip install -r .github/scripts/requirements.txt
+
       - name: Resolve deployment environment
         id: resolve_env
         shell: powershell
         run: |
-          $envName = python .github/scripts/resolve_environment.py `
-            --config .github/striim-deploy-settings.yml `
-            --branch "${{ github.ref_name }}" `
-            --environment "${{ github.event.inputs.environment }}"
+          $branch = "${{ github.ref_name }}"
+          $override = "${{ github.event.inputs.environment }}"
+          $args = @(
+            ".github/scripts/resolve_environment.py",
+            "--config",
+            ".github/striim-deploy-settings.yml",
+            "--branch",
+            $branch
+          )
+
+          if ($override -and $override.Trim().Length -gt 0) {
+            $args += @("--environment", $override)
+          }
+
+          $envName = & python @args
           Write-Host "Resolved deployment environment: $envName"
           "environment=$envName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -69,7 +83,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: python -m pip install -r .github/scripts/requirements.txt
