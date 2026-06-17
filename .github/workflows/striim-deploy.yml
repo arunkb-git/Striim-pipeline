@@ -21,25 +21,31 @@ on:
         default: false
 
 jobs:
-  # Resolve the branch/manual input into a GitHub Environment first. This
-  # scopes the deploy job's secrets to the correct target server.
+  # Map the branch (or the manual input) to a GitHub Environment. The selected
+  # environment provides the scoped STRIIM_BASE_URL/USERNAME/PASSWORD secrets,
+  # i.e. the target server, for the deploy job below.
   resolve:
     runs-on:
       - self-hosted
       - label-6
     outputs:
-      environment: ${{ steps.resolve_env.outputs.environment }}
+      environment: ${{ steps.resolve.outputs.environment }}
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.14'
+      - name: Ensure Python is available
+        run: |
+          where python
+          python --version
+      - name: Verify Python and pip
+        run: |
+          python -m ensurepip --upgrade
+          python -m pip --version
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
 
       - name: Install dependencies
         run: python -m pip install -r .github/scripts/requirements.txt
-
       - name: Resolve deployment environment
         id: resolve_env
         shell: pwsh
