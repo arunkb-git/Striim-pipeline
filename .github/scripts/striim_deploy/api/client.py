@@ -30,7 +30,7 @@ class StriimClient:
             password: Password for authentication
             logger: Logger instance
         """
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/") if base_url else ""
         self.username = username
         self.password = password
         self.token = None

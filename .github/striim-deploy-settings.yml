@@ -4,7 +4,7 @@ deployment:
   default_strategy: "one"   # Default deployment strategy (all or one)
   single_server: true       # Single server deployment
 
-  # Application-specific deployment configurations.
+  # Application-specific deployment configurations..
   #
   # Besides deployment_group/strategy, an application may override these global
   # settings for itself:

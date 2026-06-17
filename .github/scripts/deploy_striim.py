@@ -110,7 +110,15 @@ def parse_file_list(files_arg: str) -> List[str]:
     Returns:
         List of file paths
     """
-    return files_arg.split("\n") if files_arg else []
+    if not files_arg:
+        return []
+
+    # Support both newline-delimited and comma-delimited inputs.
+    return [
+        path.strip()
+        for path in files_arg.replace("\r\n", "\n").splitlines()
+        if path.strip()
+    ]
 
 
 def parse_drop_list(drop_arg: str) -> List[str]:
