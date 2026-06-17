@@ -48,7 +48,7 @@ jobs:
         run: python -m pip install -r .github/scripts/requirements.txt
       - name: Resolve deployment environment
         id: resolve_env
-        shell: pwsh
+        shell: poweshell
         run: |
           $envName = python .github/scripts/resolve_environment.py `
             --config .github/striim-deploy-settings.yml `
