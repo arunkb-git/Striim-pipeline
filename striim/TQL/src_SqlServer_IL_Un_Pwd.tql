@@ -1,5 +1,5 @@
 
-CREATE OR REPLACE APPLICATION src_SqlServer_IL;
+CREATE OR REPLACE APPLICATION src_SqlServer_IL_Un_Pwd;
 
 CREATE OR REPLACE SOURCE src_SqlServerIL USING Global.DatabaseReader ( 
   adapterName: 'DatabaseReader', 
@@ -35,5 +35,5 @@ CREATE TARGET dest_Sqlserver USING Global.DatabaseWriter (
   Password: 'K423UJcYXVRpraFLYtNKcQ==' ) 
 INPUT FROM src_SqlServerIL;
 
-END APPLICATION src_SqlServer_IL;
+END APPLICATION src_SqlServer_IL_Un_Pwd;
 

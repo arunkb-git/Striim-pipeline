@@ -74,6 +74,15 @@ class TestTQLValidator:
         validator = TQLValidator(mock_settings)
         assert validator.validate_filename("TestApp.tql", "TestApp") is True
 
+    def test_validate_filename_match_with_suffix(self, mock_settings):
+        validator = TQLValidator(mock_settings)
+        assert (
+            validator.validate_filename(
+                "src_SqlServer_IL_Un_Pwd.tql", "src_SqlServer_IL"
+            )
+            is True
+        )
+
     def test_validate_filename_mismatch_error(self, mock_settings):
         mock_settings.filename_mismatch = "error"
         validator = TQLValidator(mock_settings)
