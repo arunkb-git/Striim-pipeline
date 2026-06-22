@@ -1,5 +1,6 @@
 """Tests for the TQL validator."""
 
+import os
 from unittest.mock import patch, mock_open
 
 from striim_deploy.core.validator import TQLValidator
@@ -136,6 +137,24 @@ class TestTQLValidator:
 
         assert result == tql
         assert "CREATE OR REPLACE APPLICATION" not in result
+
+    def test_preprocess_env_placeholders(self, mock_settings):
+        tql = "Username: '{{DB_USERNAME}}'; Password: '{{DB_PASSWORD}}';"
+        with patch.dict(
+            os.environ,
+            {"DB_USERNAME": "svc_user", "DB_PASSWORD": "svc_pass"},
+            clear=False,
+        ):
+            validator = TQLValidator(mock_settings)
+            result = validator.preprocess_tql_content(tql)
+
+        assert result == "Username: 'svc_user'; Password: 'svc_pass';"
+
+    def test_preprocess_missing_env_placeholder(self, mock_settings):
+        tql = "Username: '{{DB_USERNAME}}';"
+        with patch.dict(os.environ, {}, clear=True):
+            validator = TQLValidator(mock_settings)
+            assert validator.preprocess_tql_content(tql) is None
 
     # --- validate_naming_convention ---------------------------------------
 
