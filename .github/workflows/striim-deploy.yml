@@ -145,4 +145,4 @@ jobs:
       - name: No TQL changes found
         if: steps.identify_changes.outputs.has_changes != 'true'
         shell: powershell
-        run: Write-Host "No changed TQL files found. Deployment not required."
+        run: Write-Host "No changed TQL file found. Deployment not required."
