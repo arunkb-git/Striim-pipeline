@@ -6,6 +6,10 @@ on:
       - production
   workflow_dispatch:
     inputs:
+      branch:
+        description: 'Git branch to checkout and deploy from'
+        required: false
+        default: ''
       environment:
         description: 'GitHub Environment to deploy to'
         required: false
@@ -31,6 +35,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
       - name: Ensure Python is available
         shell: powershell
@@ -56,7 +62,10 @@ jobs:
         id: resolve_env
         shell: powershell
         run: |
-          $branch = "${{ github.ref_name }}"
+          $branch = "${{ github.event.inputs.branch }}"
+          if (-not $branch -or $branch.Trim().Length -eq 0) {
+            $branch = "${{ github.ref_name }}"
+          }
           $override = "${{ github.event.inputs.environment }}"
 
           $args = @(
@@ -86,6 +95,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
       - name: Ensure Python is available
         shell: powershell
@@ -109,13 +120,15 @@ jobs:
           python .github/scripts/deploy_striim.py
           --config ".github/striim-deploy-settings.yml"
           --files "${{ steps.identify_changes.outputs.changed_files }}"
-          --branch "${{ github.ref_name }}"
+          --branch "${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}"
           ${{ github.event.inputs.drop_applications != '' && format('--drop-applications "{0}"', github.event.inputs.drop_applications) || '' }}
           ${{ github.event.inputs.force_drop_all == 'true' && '--force-drop-all' || '' }}
         env:
           STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
           STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
           STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
       - name: No TQL changes found
         if: steps.identify_changes.outputs.has_changes != 'true'

@@ -5,8 +5,8 @@ CREATE OR REPLACE SOURCE src_SqlServerIL USING Global.DatabaseReader (
   adapterName: 'DatabaseReader', 
   Password_encrypted: 'false', 
   connectionProfileName: '', 
-  FetchSize: 100, 
-  ParallelThreads: 1, 
+  FetchSize: 100,
+  ParallelThreads: 1,
   CreateSchema: false, 
   RestartBehaviourOnILInterruption: 'keepTargetTableData', 
   useConnectionProfile: false, 
@@ -14,8 +14,8 @@ CREATE OR REPLACE SOURCE src_SqlServerIL USING Global.DatabaseReader (
   ConnectionURL: 'jdbc:sqlserver://10.10.142.66:1433;databaseName=testdb;', 
   Query: '', 
   DatabaseProviderType: 'SQLServer', 
-  Username: 'SA', 
-  Password: 'K423UJcYXVRpraFLYtNKcQ==', 
+  Username: '{{DB_USERNAME}}', 
+  Password: '{{DB_PASSWORD}}', 
   Tables: 'testdb.dbo.WAREHOUSE' ) 
 OUTPUT TO src_SqlServerIL;
 
@@ -31,8 +31,8 @@ CREATE TARGET dest_Sqlserver USING Global.DatabaseWriter (
   DatabaseProviderType: 'Default', 
   Tables: 'testdb.dbo.WAREHOUSE,testdb.dbo.WAREHOUSE1;', 
   ConnectionURL: 'jdbc:sqlserver://10.10.142.66:1433;databaseName=testdb;', 
-  Username: 'SA', 
-  Password: 'K423UJcYXVRpraFLYtNKcQ==' ) 
+  Username: '{{DB_USERNAME}}', 
+  Password: '{{DB_PASSWORD}}' ) 
 INPUT FROM src_SqlServerIL;
 
 END APPLICATION src_SqlServer_IL;

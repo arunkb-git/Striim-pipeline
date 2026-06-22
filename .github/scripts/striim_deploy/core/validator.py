@@ -119,7 +119,13 @@ class TQLValidator:
             # compare on the bare name since app_name is also bare.
             _, filename = split_identifier(filename)
 
-            if filename != app_name:
+            is_valid_name = (
+                filename == app_name
+                or filename.startswith(f"{app_name}_")
+                or filename.startswith(f"{app_name}-")
+            )
+
+            if not is_valid_name:
                 mismatch_message = (
                     f"Filename '{filename}.tql' does not match app name '{app_name}'"
                 )
@@ -148,6 +154,28 @@ class TQLValidator:
             Preprocessed content or None if validation fails
         """
         try:
+            # Resolve environment-based placeholders before any other processing.
+            placeholder_pattern = re.compile(
+                r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}|\$\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}"
+            )
+            missing = []
+
+            def _replace(match: re.Match) -> str:
+                key = match.group(1) or match.group(2)
+                value = os.getenv(key)
+                if value is None or value == "":
+                    missing.append(key)
+                    return match.group(0)
+                return value
+
+            content = placeholder_pattern.sub(_replace, content)
+            if missing:
+                self.logger.error(
+                    "Missing required environment variables for TQL placeholders: %s",
+                    ", ".join(sorted(set(missing))),
+                )
+                return None
+
             if self.settings.enforce_create_or_replace:
                 pattern = r"CREATE\s+APPLICATION\s+"
                 replacement = "CREATE OR REPLACE APPLICATION "
