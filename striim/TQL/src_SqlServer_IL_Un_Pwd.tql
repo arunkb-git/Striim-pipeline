@@ -3,7 +3,7 @@ CREATE OR REPLACE APPLICATION src_SqlServer_IL_Un_Pwd;
 
 CREATE OR REPLACE SOURCE src_SqlServerIL USING Global.DatabaseReader ( 
   adapterName: 'DatabaseReader', 
-  Password_encrypted: 'true', 
+  Password_encrypted: 'false', 
   connectionProfileName: '', 
   FetchSize: 100, 
   ParallelThreads: 1, 
@@ -23,7 +23,7 @@ CREATE TARGET dest_Sqlserver USING Global.DatabaseWriter (
   ConnectionRetryPolicy: 'retryInterval=30, maxRetries=3', 
   StatementCacheSize: 50, 
   CheckPointTable: 'CHKPOINT', 
-  Password_encrypted: 'true', 
+  Password_encrypted: 'false', 
   PreserveSourceTransactionBoundary: false, 
   CDDLAction: 'Process', 
   BatchPolicy: 'EventCount:1000,Interval:2', 
