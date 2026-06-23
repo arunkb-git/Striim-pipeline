@@ -17,9 +17,9 @@ CREATE OR REPLACE SOURCE src_SqlServer_IL_Un_Pwd USING Global.DatabaseReader (
   Username: '{{DB_USERNAME}}', 
   Password: '{{DB_PASSWORD}}', 
   Tables: 'testdb.dbo.WAREHOUSE' ) 
-OUTPUT TO src_SqlServerIL;
+OUTPUT TO src_SqlServer_IL_Un_Pwd;
 
-CREATE TARGET dest_Sqlserver USING Global.DatabaseWriter ( 
+CREATE TARGET dest_Sqlserver_Un_Pwd USING Global.DatabaseWriter ( 
   ConnectionRetryPolicy: 'retryInterval=30, maxRetries=3', 
   StatementCacheSize: 50, 
   CheckPointTable: 'CHKPOINT', 
@@ -33,7 +33,7 @@ CREATE TARGET dest_Sqlserver USING Global.DatabaseWriter (
   ConnectionURL: '{{DB_CONNECTION_URL}}', 
   Username: '{{DB_USERNAME}}', 
   Password: '{{DB_PASSWORD}}' ) 
-INPUT FROM src_SqlServerIL;
+INPUT FROM src_SqlServer_IL_Un_Pwd;
 
 END APPLICATION src_SqlServer_IL_Un_Pwd;
 
