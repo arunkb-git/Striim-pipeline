@@ -39,7 +39,7 @@ deployment:
 # Deployment validation settings
 validation:
   # File and directory validation
-  require_specific_directories: false
+  require_specific_directories: true
   allowed_directories:
     - "striim/TQL"
   enforce_naming_convention: true
