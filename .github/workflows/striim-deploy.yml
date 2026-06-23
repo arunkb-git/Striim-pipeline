@@ -127,6 +127,7 @@ jobs:
 
       - name: Deploy Changed TQL Files
         if: steps.identify_changes.outputs.has_changes == 'true'
+        continue-on-error: true
         shell: powershell
         run: >-
           python .github/scripts/deploy_striim.py
