@@ -38,7 +38,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
-      - name: Ensure Python is available.
+      - name: Ensure Python is available
         shell: powershell
         run: |
           where python
