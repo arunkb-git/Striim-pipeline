@@ -296,14 +296,45 @@ class StriimDeployer:
         success = True
         failed_files = []
 
-        # Process each file
+        # First, resolve all file targets so we can prepare them for deployment
+        resolved_targets = []  # List of tuples (file_path, namespace, app_name)
+        for file_path in file_list:
+            if os.path.exists(file_path):
+                namespace, app_name = self._resolve_file_target(file_path)
+                if app_name and namespace:
+                    resolved_targets.append((file_path, namespace, app_name))
+                else:
+                    self.logger.warning(
+                        "Skipping unresolved target for file: %s", file_path
+                    )
+            else:
+                self.logger.info("Skipping deleted file: %s", file_path)
+
+        # Pre-prepare all resolved applications for deployment (stop/undeploy)
+        for _file_path, namespace, app_name in resolved_targets:
+            # Ensure state manager targets the correct namespace
+            self.namespace = namespace
+            self.state_manager.namespace = namespace
+            self.logger.info(
+                "Preparing existing application %s in namespace %s for redeploy",
+                app_name,
+                namespace,
+            )
+            if not self.state_manager.prepare_for_deployment(app_name):
+                self.logger.error(
+                    "Failed to prepare application %s for deployment", app_name
+                )
+                if not self.settings.continue_on_error:
+                    return False
+
+        # Now create each application (in original order)
         for file_path in file_list:
             if os.path.exists(file_path):
                 # Resolve namespace + app name so a drop targets the right FQN
                 namespace, app_name = self._resolve_file_target(file_path)
 
                 if app_name and namespace:
-                    # Check if app should be dropped
+                    # Check if app should be dropped explicitly
                     should_drop = force_drop_all or app_name in drop_list
 
                     if should_drop:
