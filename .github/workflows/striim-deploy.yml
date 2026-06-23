@@ -139,6 +139,7 @@ jobs:
           STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
           STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
           STRIIM_PASSWORD: ${{ secrets.STRIIM_PASSWORD }}
+          DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
