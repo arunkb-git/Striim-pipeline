@@ -5,18 +5,18 @@ CREATE OR REPLACE SOURCE oracleIL_Src USING Global.DatabaseReader (
   adapterName: 'DatabaseReader', 
   DatabaseProviderType: 'Oracle', 
   Password_encrypted: 'false', 
-  Username: 'SA', 
+  Username: '{{DB_USERNAME}}', 
   connectionProfileName: '', 
   FetchSize: 100, 
   ParallelThreads: 1, 
   CreateSchema: false, 
   Tables: 'paypal.pricing_psp_configs', 
-  Password: 'K423UJcYXVRpraFLYtNKcQ==', 
+  Password: '{{DB_PASSWORD}}', 
   RestartBehaviourOnILInterruption: 'keepTargetTableData', 
   useConnectionProfile: false, 
   QuiesceOnILCompletion: false, 
   Query: '', 
-  ConnectionURL: 'jdbc:oracle:thin:@//localhost:1521/ORCL' ) 
+  ConnectionURL: '{{DB_CONNECTION_URL}}'//'jdbc:oracle:thin:@//localhost:1521/ORCL' ) 
 OUTPUT TO oracleIL_SrcOutput;
 
 CREATE OR REPLACE STREAM spannerLookupIL OF Global.WAEvent;
@@ -26,7 +26,7 @@ CREATE OR REPLACE STREAM MappedTempTableIL OF Global.WAEvent;
 CREATE OR REPLACE OPEN PROCESSOR spannerLookUpOPIL USING Global.ExternalCacheOpV7 (
   EnableMetrics: false, 
   CredentialsFile: 'UploadedFiles/striimfieldproject.json', 
-  ConnectionUrl: 'jdbc:cloudspanner:/projects/striimfieldproject/instances/paypal-spanner-instance/databases/paypal_test_db', 
+  ConnectionUrl: '{{JDBC_CONNECTION_URL}}',
   EnableLogging: false, 
   EnableCacheTimeout: true, 
   CacheSize: 100000, 
@@ -45,13 +45,13 @@ INSERT INTO MappedTempTableIL
 FROM spannerLookupIL;
 
 CREATE OR REPLACE TARGET targetSpannerCompIL USING Global.SpannerWriter ( 
-  InstanceID: 'paypal-spanner-instance', 
+  InstanceID: '{{INSTANCE_ID}}',
   CheckpointTable: 'CHKPOINT', 
   ExecuteInsertAsUpdate: false, 
   BatchPolicy: 'EventCount: 1, Interval: 3s', 
   Tables: 'pricing_psp_configs_update,paypal_test_db.pricing_psp_configs_update', 
   ServiceAccountKey: 'UploadedFiles/striimfieldproject.json', 
-  ProjectId: 'striimfieldproject', 
+  ProjectId: '{{PROJECT_ID}}', 
   adapterName: 'SpannerWriter', 
   PreserveSourceTransactionBoundary: false, 
   CDDLAction: 'Process', 

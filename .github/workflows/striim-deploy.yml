@@ -143,6 +143,9 @@ jobs:
           DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
           DB_USERNAME: ${{ secrets.DB_USERNAME }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JDBC_CONNECTION_URL: ${{ secrets.JDBC_CONNECTION_URL }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
+          INSTANCE_ID: ${{ secrets.INSTANCE_ID }}
 
       - name: No TQL changes found
         if: steps.identify_changes.outputs.has_changes != 'true'
