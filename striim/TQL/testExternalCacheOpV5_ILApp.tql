@@ -1,0 +1,63 @@
+
+CREATE OR REPLACE APPLICATION testExternalCacheOpV5_ILApp;
+
+CREATE OR REPLACE SOURCE oracleIL_Src USING Global.DatabaseReader ( 
+  adapterName: 'DatabaseReader', 
+  DatabaseProviderType: 'Oracle', 
+  Password_encrypted: 'false', 
+  Username: 'SA', 
+  connectionProfileName: '', 
+  FetchSize: 100, 
+  ParallelThreads: 1, 
+  CreateSchema: false, 
+  Tables: 'paypal.pricing_psp_configs', 
+  Password: 'K423UJcYXVRpraFLYtNKcQ==', 
+  RestartBehaviourOnILInterruption: 'keepTargetTableData', 
+  useConnectionProfile: false, 
+  QuiesceOnILCompletion: false, 
+  Query: '', 
+  ConnectionURL: 'jdbc:oracle:thin:@//localhost:1521/ORCL' ) 
+OUTPUT TO oracleIL_SrcOutput;
+
+CREATE OR REPLACE STREAM spannerLookupIL OF Global.WAEvent;
+
+CREATE OR REPLACE STREAM MappedTempTableIL OF Global.WAEvent;
+
+CREATE OR REPLACE OPEN PROCESSOR spannerLookUpOPIL USING Global.ExternalCacheOpV7 (
+  EnableMetrics: false, 
+  CredentialsFile: 'UploadedFiles/striimfieldproject.json', 
+  ConnectionUrl: 'jdbc:cloudspanner:/projects/striimfieldproject/instances/paypal-spanner-instance/databases/paypal_test_db', 
+  EnableLogging: false, 
+  EnableCacheTimeout: true, 
+  CacheSize: 100000, 
+  ConfigFile: 'UploadedFiles/paypalSpannerLookUp.json', 
+  DatabaseQueryOnMiss: true, 
+  ConnectionPoolSize: 1, 
+  CacheTimeoutMinutes: 10 ) 
+INSERT INTO spannerLookupIL
+FROM oracleIL_SrcOutput;
+
+CREATE OR REPLACE OPEN PROCESSOR mapping_OPIL USING Global.TableMappingOpV7 (
+  EnableDatatypeCasting: false, 
+  EnableLogging: false, 
+  ConfigFile: 'UploadedFiles/TableMappingOPJson.json' ) 
+INSERT INTO MappedTempTableIL
+FROM spannerLookupIL;
+
+CREATE OR REPLACE TARGET targetSpannerCompIL USING Global.SpannerWriter ( 
+  InstanceID: 'paypal-spanner-instance', 
+  CheckpointTable: 'CHKPOINT', 
+  ExecuteInsertAsUpdate: false, 
+  BatchPolicy: 'EventCount: 1, Interval: 3s', 
+  Tables: 'pricing_psp_configs_update,paypal_test_db.pricing_psp_configs_update', 
+  ServiceAccountKey: 'UploadedFiles/striimfieldproject.json', 
+  ProjectId: 'striimfieldproject', 
+  adapterName: 'SpannerWriter', 
+  PreserveSourceTransactionBoundary: false, 
+  CDDLAction: 'Process', 
+  ExecuteUpdateAsInsert: false, 
+  IgnorableExceptionCode: 'NOT_FOUND' ) 
+INPUT FROM MappedTempTableIL;
+
+END APPLICATION testExternalCacheOpV5_ILApp;
+
