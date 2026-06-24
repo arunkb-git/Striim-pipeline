@@ -7,7 +7,7 @@ CREATE OR REPLACE SOURCE oracleIL_Src USING Global.DatabaseReader (
   Username: '[[admin.striimvault.DB_USERNAME]]', 
   connectionProfileName: '', 
   FetchSize: 100, 
-  ParallelThreads: 1, 
+  ParallelThreads: 1,
   CreateSchema: false, 
   Tables: 'paypal.pricing_psp_configs', 
   Password: '[[admin.striimvault.DB_PASSWORD]]', 
