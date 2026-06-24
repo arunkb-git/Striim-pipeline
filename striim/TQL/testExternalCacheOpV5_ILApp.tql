@@ -16,7 +16,7 @@ CREATE OR REPLACE SOURCE oracleIL_Src USING Global.DatabaseReader (
   useConnectionProfile: false, 
   QuiesceOnILCompletion: false, 
   Query: '', 
-  ConnectionURL: '{{DB_CONNECTION_URL}}',
+  ConnectionURL: '{{DB_CONNECTION_URL}}' )
 OUTPUT TO oracleIL_SrcOutput;
 
 CREATE OR REPLACE STREAM spannerLookupIL OF Global.WAEvent;
