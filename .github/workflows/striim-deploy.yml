@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Git branch to checkout and deploy from'.
+        description: 'Git branch to checkout and deploy from'
         required: false
         default: ''
       environment:
@@ -38,7 +38,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
-      - name: Ensure Python is available.
+      - name: Ensure Python is available
         shell: powershell
         run: |
           where python
