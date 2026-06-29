@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Git branch to checkout and deploy from'
+        description: 'Git branch to checkout and deploy from'.
         required: false
         default: ''
       environment:
