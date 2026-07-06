@@ -46,8 +46,21 @@ jobs:
       - name: Verify Python and pip
         shell: bash
         run: |
-          python3 -m ensurepip --upgrade
-          python3 -m pip --version
+          python3 --version
+          if python3 -m pip --version; then
+            echo "pip is available"
+          else
+            echo "pip is not available. Attempting to install python3-pip."
+            if command -v apt-get >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y python3-pip
+            elif command -v yum >/dev/null 2>&1; then
+              sudo yum install -y python3-pip
+            else
+              echo "Unable to install pip automatically on this runner"
+              exit 1
+            fi
+          fi
 
       - name: Upgrade pip
         shell: bash
