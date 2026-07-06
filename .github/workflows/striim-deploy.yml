@@ -39,58 +39,55 @@ jobs:
           ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
       - name: Ensure Python is available.
-        shell: powershell
+        shell: bash
         run: |
-          where python
           python --version
 
       - name: Verify Python and pip
-        shell: powershell
+        shell: bash
         run: |
           python -m ensurepip --upgrade
           python -m pip --version
 
       - name: Upgrade pip
-        shell: powershell
+        shell: bash
         run: python -m pip install --upgrade pip
 
       - name: Install dependencies
-        shell: powershell
+        shell: bash
         run: python -m pip install -r .github/scripts/requirements.txt
 
       - name: Resolve deployment environment
         id: resolve_env
-        shell: powershell
+        shell: bash
         run: |
-          $branch = "${{ github.event.inputs.branch }}"
-          if (-not $branch -or $branch.Trim().Length -eq 0) {
-            $branch = "${{ github.ref_name }}"
-          }
-          $override = "${{ github.event.inputs.environment }}"
+          branch="${{ github.event.inputs.branch }}"
+          if [ -z "$branch" ]; then
+            branch="${{ github.ref_name }}"
+          fi
+          override="${{ github.event.inputs.environment }}"
 
-          $args = @(
-            ".github/scripts/resolve_environment.py",
-            "--config",
-            ".github/striim-deploy-settings.yml",
-            "--branch",
-            $branch
+          args=(
+            ".github/scripts/resolve_environment.py"
+            "--config"
+            ".github/striim-deploy-settings.yml"
+            "--branch"
+            "$branch"
           )
 
-          if ($override -and $override.Trim().Length -gt 0) {
-            $args += @("--environment", $override)
-          }
+          if [ -n "$override" ]; then
+            args+=("--environment" "$override")
+          fi
 
-          $envName = & python @args
-          Write-Host "Resolved deployment environment: $envName"
-          "environment=$envName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          envName=$(python "${args[@]}")
+          echo "Resolved deployment environment: $envName"
+          echo "environment=$envName" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: resolve
-
     runs-on:
       - self-hosted
       - label-7
-
     environment: ${{ needs.resolve.outputs.environment }}
 
     steps:
@@ -98,14 +95,13 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}
 
-      - name: Ensure Python is available..
-        shell: powershell
+      - name: Ensure Python is available.
+        shell: bash
         run: |
-          where python
           python --version
 
       - name: Install dependencies
-        shell: powershell
+        shell: bash
         run: python -m pip install -r .github/scripts/requirements.txt
 
       - name: Identify Changed Files
@@ -115,27 +111,27 @@ jobs:
 
       - name: Show Changed TQL Files
         if: steps.identify_changes.outputs.has_changes == 'true'
-        shell: powershell
+        shell: bash
         run: |
-          Write-Host "Changed TQL files detected:"
-          $files = "${{ steps.identify_changes.outputs.changed_files }}"
-          foreach ($line in $files -split "`n") {
-            if ($line.Trim()) {
-              Write-Host "- $($line.Trim())"
-            }
-          }
+          echo "Changed TQL files detected:"
+          files="${{ steps.identify_changes.outputs.changed_files }}"
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              echo "- $line"
+            fi
+          done <<< "$files"
 
-      - name: Deploy Changed TQL Files.
+      - name: Deploy Changed TQL Files
         if: steps.identify_changes.outputs.has_changes == 'true'
         continue-on-error: true
-        shell: powershell
-        run: >-
-          python .github/scripts/deploy_striim.py
-          --config ".github/striim-deploy-settings.yml"
-          --files "${{ steps.identify_changes.outputs.changed_files }}"
-          --branch "${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}"
-          ${{ github.event.inputs.drop_applications != '' && format('--drop-applications "{0}"', github.event.inputs.drop_applications) || '' }}
-          ${{ github.event.inputs.force_drop_all == 'true' && '--force-drop-all' || '' }}
+        shell: bash
+        run: |
+          python .github/scripts/deploy_striim.py \
+            --config ".github/striim-deploy-settings.yml" \
+            --files "${{ steps.identify_changes.outputs.changed_files }}" \
+            --branch "${{ github.event.inputs.branch != '' && github.event.inputs.branch || github.ref_name }}" \
+            ${{ github.event.inputs.drop_applications != '' && format('--drop-applications "{0}"', github.event.inputs.drop_applications) || '' }} \
+            ${{ github.event.inputs.force_drop_all == 'true' && '--force-drop-all' || '' }}
         env:
           STRIIM_BASE_URL: ${{ secrets.STRIIM_BASE_URL }}
           STRIIM_USERNAME: ${{ secrets.STRIIM_USERNAME }}
