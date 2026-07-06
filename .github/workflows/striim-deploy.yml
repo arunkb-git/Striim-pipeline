@@ -28,7 +28,7 @@ jobs:
   resolve:
     runs-on:
       - self-hosted
-      - label-6
+      - label-7
 
     outputs:
       environment: ${{ steps.resolve_env.outputs.environment }}
@@ -89,7 +89,7 @@ jobs:
 
     runs-on:
       - self-hosted
-      - label-6
+      - label-7
 
     environment: ${{ needs.resolve.outputs.environment }}
 
