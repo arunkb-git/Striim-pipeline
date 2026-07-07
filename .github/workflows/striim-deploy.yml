@@ -43,7 +43,7 @@ jobs:
         run: |
           python3 --version
 
-      - name: Verify Python and pip
+      - name: Verify Python and pip.
         shell: bash
         run: |
           python3 --version
