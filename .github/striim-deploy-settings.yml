@@ -79,7 +79,7 @@ validation:
 namespace_mapping:
   develop: "dev"
   master: "prod"
-  production: "admin"
+  production: "heena"
 
 # Branch to GitHub Environment mapping.
 # Selects which GitHub Environment (and therefore which scoped
